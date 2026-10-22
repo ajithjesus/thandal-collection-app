@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS = {
   key: 'primary',
   customerName: '',
   phone: '',
+  whatsappOptIn: false,
   loanAmount: 800000,
   autoDailyAmount: 320,
   loanDailyAmount: 700,
@@ -129,13 +130,15 @@ app.get('/api/settings', async (_req, res, next) => {
 
 const saveSettings = async (req, res, next) => {
   try {
-    const allowed = ['customerName', 'phone', ...numericSettingKeys];
+    const allowed = ['customerName', 'phone', 'whatsappOptIn', ...numericSettingKeys];
     const changes = {};
     for (const key of allowed) {
       if (!(key in req.body)) continue;
       if (numericSettingKeys.includes(key)) {
         if (!isNonNegativeNumber(req.body[key])) return res.status(400).json({ message: `${key} must be a non-negative number.` });
         changes[key] = Number(req.body[key]);
+      } else if (key === 'whatsappOptIn') {
+        changes[key] = req.body[key] === true;
       } else {
         changes[key] = String(req.body[key] ?? '').trim();
       }
@@ -151,6 +154,79 @@ const saveSettings = async (req, res, next) => {
 
 app.post('/api/settings', saveSettings);
 app.put('/api/settings', saveSettings);
+
+app.post('/api/whatsapp/collection-message', async (req, res, next) => {
+  try {
+    const { entryId } = req.body ?? {};
+    if (!mongoose.isValidObjectId(entryId)) return res.status(400).json({ message: 'Invalid collection entry id.' });
+
+    const entry = await CollectionEntry.findOne({ _id: entryId, accountMobile: req.accountMobile }).lean();
+    if (!entry) return res.status(404).json({ message: 'Collection entry not found.' });
+
+    const settings = await getOrCreateSettings(req.accountMobile);
+    if (!settings.whatsappOptIn) return res.status(403).json({ message: 'Customer WhatsApp consent has not been recorded in settings.' });
+
+    const recipient = normalizeMobileNumber(settings.phone);
+    if (!recipient) return res.status(400).json({ message: 'Add a valid customer WhatsApp number in settings.' });
+
+    const { WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_TEMPLATE_NAME, WHATSAPP_TEMPLATE_LANGUAGE, WHATSAPP_GRAPH_API_VERSION } = process.env;
+    if (![WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_TEMPLATE_NAME, WHATSAPP_TEMPLATE_LANGUAGE, WHATSAPP_GRAPH_API_VERSION].every(Boolean)) {
+      return res.status(503).json({ message: 'WhatsApp sending is not configured on the server.' });
+    }
+
+    const expected = entry.type === 'monthly'
+      ? Number(entry.monthlyExpected || 0)
+      : Number(entry.autoExpected || 0) + Number(entry.loanExpected || 0);
+    const received = entry.type === 'monthly'
+      ? Number(entry.monthlyReceived || 0)
+      : Number(entry.autoReceived || 0) + Number(entry.loanReceived || 0);
+    const pending = Math.max(0, expected - received);
+    const formatAmount = (value) => new Intl.NumberFormat('en-IN', {
+      style: 'currency', currency: 'INR', maximumFractionDigits: 0,
+    }).format(value);
+    const dateText = new Date(`${entry.date}T00:00:00`).toLocaleDateString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric',
+    });
+    const parameters = [
+      settings.customerName.trim() || 'Customer',
+      entry.type === 'monthly' ? 'monthly' : 'daily',
+      dateText,
+      formatAmount(expected),
+      formatAmount(received),
+      formatAmount(pending),
+    ].map((text) => ({ type: 'text', text }));
+
+    let response;
+    try {
+      response = await fetch(`https://graph.facebook.com/${encodeURIComponent(WHATSAPP_GRAPH_API_VERSION)}/${encodeURIComponent(WHATSAPP_PHONE_NUMBER_ID)}/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: recipient.replace(/\D/g, ''),
+          type: 'template',
+          template: {
+            name: WHATSAPP_TEMPLATE_NAME,
+            language: { code: WHATSAPP_TEMPLATE_LANGUAGE },
+            components: [{ type: 'body', parameters }],
+          },
+        }),
+      });
+    } catch {
+      return res.status(502).json({ message: 'Could not reach WhatsApp. The collection entry was saved.' });
+    }
+
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return res.status(502).json({ message: result.error?.message || 'WhatsApp rejected the message. The collection entry was saved.' });
+    }
+    res.json({ sent: true, messageId: result.messages?.[0]?.id });
+  } catch (error) { next(error); }
+});
 
 app.get('/api/customers', async (req, res, next) => {
   try {

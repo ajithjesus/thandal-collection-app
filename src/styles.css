@@ -475,6 +475,23 @@ textarea:focus-visible {
     margin-top: -1px
 }
 
+.consent-field {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    color: #48546a;
+    font-size: 11px;
+    line-height: 1.5
+}
+
+.consent-field input {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    margin: 1px 0 0;
+    accent-color: #0f9f91
+}
+
 .balance-toggle {
     display: flex;
     gap: 10px;

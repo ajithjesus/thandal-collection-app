@@ -4,6 +4,7 @@ const settingsSchema = new mongoose.Schema({
   key: { type: String, unique: true, default: 'primary' },
   customerName: { type: String, default: '' },
   phone: { type: String, default: '' },
+  whatsappOptIn: { type: Boolean, default: false },
   loanAmount: { type: Number, min: 0, default: 800000 },
   autoDailyAmount: { type: Number, min: 0, default: 320 },
   loanDailyAmount: { type: Number, min: 0, default: 700 },

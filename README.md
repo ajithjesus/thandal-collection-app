@@ -80,12 +80,20 @@ The Express server will serve the generated frontend from `dist` and the API fro
 ## API endpoints
 
 - `GET /api/auth/session` — validate the signed-in account token and return its expiry
- `GET /api/customers` — list customers for the signed-in account
- `POST /api/customers` — add a customer with a name and mobile number
 
-## Customer messages
+## Automatic WhatsApp updates
 
-After saving an entry, the message preview includes the saved amounts, pending amount, and current outstanding loan balance. Select **Open WhatsApp message** to open WhatsApp with the message filled in, review it, and press Send manually. This application does not send messages automatically.
+After a collection entry dated today is saved, the server sends a WhatsApp message only when customer opt-in is recorded in **Customer & amounts**. The customer phone number must include its country code. A missing configuration or WhatsApp API failure does not undo the saved collection entry.
+
+Automatic delivery requires a Meta WhatsApp Business Platform account, a registered phone number, and an approved message template. Configure these server environment variables (never put the access token in frontend code):
+
+- `WHATSAPP_ACCESS_TOKEN`
+- `WHATSAPP_PHONE_NUMBER_ID`
+- `WHATSAPP_TEMPLATE_NAME`
+- `WHATSAPP_TEMPLATE_LANGUAGE`
+- `WHATSAPP_GRAPH_API_VERSION`
+
+The configured template must have six body text parameters in this order: customer name, entry type (`daily` or `monthly`), date, expected amount, received amount, and pending amount. For example: `Hello {{1}}, your {{2}} collection update for {{3}}: expected {{4}}, received {{5}}, pending {{6}}. Thank you.` The template must be approved by Meta and comply with WhatsApp policies. Sending requires the recipient's prior consent.
 
 ## Data and backup
 

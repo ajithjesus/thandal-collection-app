@@ -12,6 +12,7 @@ import {
   loadDashboardData,
   saveEntry as saveEntryThunk,
   saveSettings as saveSettingsThunk,
+  sendCollectionMessage as sendCollectionMessageThunk,
   updateSettingDraft,
 } from './store/appDataSlice.js';
 import { getExpected, getPending, getReceived, money, today } from './utils/collections.js';
@@ -197,7 +198,16 @@ function App() {
         note: '',
       }));
       const pending = getPending(saved);
-      setNotice(pending === 0 ? 'Collection entry saved to MongoDB.' : `${saved.type === 'monthly' ? 'Monthly payment' : 'Daily collection'} saved. ${money(pending)} remains pending.`);
+      let noticeText = pending === 0 ? 'Collection entry saved to MongoDB.' : `${saved.type === 'monthly' ? 'Monthly payment' : 'Daily collection'} saved. ${money(pending)} remains pending.`;
+      if (saved.date === today() && settings.whatsappOptIn) {
+        try {
+          await dispatch(sendCollectionMessageThunk(saved._id)).unwrap();
+          noticeText += ' WhatsApp message sent.';
+        } catch (messageError) {
+          noticeText += ` WhatsApp message was not sent: ${messageError.message}`;
+        }
+      }
+      setNotice(noticeText);
     } catch (error) {
       setNotice(`Collection was not saved: ${error.message}`);
     }
@@ -318,6 +328,7 @@ function App() {
               <div className="settings-grid">
                 <label className="field"><span>Customer name</span><input value={settings.customerName} onChange={(e) => updateSetting('customerName', e.target.value)} placeholder="e.g. Ramesh Kumar" /></label>
                 <label className="field"><span>WhatsApp number</span><input value={settings.phone} onChange={(e) => updateSetting('phone', e.target.value)} placeholder="Country code + number, e.g. 919876543210" /><small>Use country code for best results (91 for India).</small></label>
+                <label className="consent-field"><input type="checkbox" checked={settings.whatsappOptIn} onChange={(e) => updateSetting('whatsappOptIn', e.target.checked)} /><span>The customer agreed to receive WhatsApp collection updates automatically.</span></label>
               </div>
               <div className="settings-actions"><span className="fine-print">{settingsDirty ? 'Unsaved changes' : 'Settings saved'}</span><button className="primary-button" type="submit"><Icon name="check" /> Save settings to database</button></div>
             </form>

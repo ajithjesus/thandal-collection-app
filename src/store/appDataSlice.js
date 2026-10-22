@@ -21,6 +21,11 @@ export const saveEntry = createAsyncThunk('appData/saveEntry', (entry) => apiReq
   data: entry,
 }));
 
+export const sendCollectionMessage = createAsyncThunk('appData/sendCollectionMessage', (entryId) => apiRequest('/whatsapp/collection-message', {
+  method: 'POST',
+  data: { entryId },
+}));
+
 export const deleteEntry = createAsyncThunk('appData/deleteEntry', (id) => apiRequest(`/entries/${id}`, {
   method: 'DELETE',
 }));

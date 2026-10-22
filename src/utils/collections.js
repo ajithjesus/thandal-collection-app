@@ -1,6 +1,7 @@
 export const DEFAULT_SETTINGS = {
     customerName: '',
     phone: '',
+    whatsappOptIn: false,
     loanAmount: 800000,
     autoDailyAmount: 320,
     loanDailyAmount: 700,
